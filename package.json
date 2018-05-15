@@ -1,0 +1,19 @@
+{
+  "name": "rt-games-playtest-generator",
+  "version": "1.0.0",
+  "description": "Generates playtests for RT Games using AWS Lambda",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeff-chamberlain-rt/RTGamesPlaytestGeneratorApp.git"
+  },
+  "author": "Jeff Chamberlain",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jeff-chamberlain-rt/RTGamesPlaytestGeneratorApp/issues"
+  },
+  "homepage": "https://github.com/jeff-chamberlain-rt/RTGamesPlaytestGeneratorApp#readme"
+}
