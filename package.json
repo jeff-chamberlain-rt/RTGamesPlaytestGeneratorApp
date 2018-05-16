@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/jeff-chamberlain-rt/RTGamesPlaytestGeneratorApp/issues"
   },
-  "homepage": "https://github.com/jeff-chamberlain-rt/RTGamesPlaytestGeneratorApp#readme"
+  "homepage": "https://github.com/jeff-chamberlain-rt/RTGamesPlaytestGeneratorApp#readme",
+  "dependencies": {
+    "querystring": "^0.2.0"
+  }
 }
