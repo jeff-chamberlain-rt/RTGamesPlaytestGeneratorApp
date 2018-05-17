@@ -2,7 +2,8 @@
 
 // Packages
 const AWS = require("aws-sdk");
-const querystring = require('querystring');
+const https = require('https');
+const url = require('url');
 
 // Environment Variables
 const kUserTableName = process.env.USER_TABLE_NAME;
@@ -15,72 +16,59 @@ const kDefaultPlaytestCount = Number(process.env.DEFAULT_PLAYTEST_COUNT);
 // Constant Objects
 const DocClient = new AWS.DynamoDB.DocumentClient ();
 
-exports.handler = function(event, context, callback) {
-    var input = querystring.parse(event.body);
-    if (!VerifyInput(input))
-    {
-      EphemeralResponse ( "Sorry! You can only create playtests in the #Ocelot channel!", callback );
-      return;
-    }
+var responseURL = {};
 
-    var args = ParseArguments ( input.text );
-    var caller = input.user_id;
-    switch ( args[0] )
-    {
-      case 'add':
-        ChangeUserState ( caller, args[1], 1, false, callback );
-        break;
-      case 'remove':
-        ChangeUserState ( caller, args[1], 0, false, callback );
-        break;
-      case 'whitelist':
-        ChangeUserState ( caller, args[1], 1, true, callback );
-        break;
-      case 'blacklist':
-        ChangeUserState ( caller, args[1], 0, true, callback );
-        break;
-      case 'reset':
-        ResetUser ( user, callback );
-        break;
-      case 'add-playtester':
-        AddPlaytester( caller, args[1], callback );
-        break;
-      case 'remove-playtester':
-        RemovePlaytester ( caller, args[1], callback );
-        break;
-      case 'give-privileges':
-        GivePrivileges ( caller, args[1], callback );
-        break;
-      case 'remove-privileges':
-        RemovePrivileges ( caller, args[1], callback );
-        break;
-      case 'preview':
-        PreviewPlaytest( callback );
-        break;
-      case 'generate':
-        GeneratePlaytest( args[1], callback );
-        break;
-      case 'undo':
+exports.handler = function(event, context ) {
+  const.log(context);
+  var input = context.Records[0].Sns.Message;
 
-        break;
-      default:
-        EphemeralResponse ( "Sorry! I couldn't understand your request", callback );
-        break;
-    }
-};
+  responseURL = url.parse( input.response_url );
 
-function VerifyInput ( input ) {
-  if ( !input
-    || !input.token
-    || input.token !== kVerificationToken
-    || !input.channel_id
-    || input.channel_id !== kChannelId )
+  var args = ParseArguments ( input.text );
+  var caller = input.user_id;
+  switch ( args[0] )
   {
-    return false;
-  }
+    case 'add':
+    ChangeUserState ( caller, args[1], 1, false );
+    break;
+    case 'remove':
+    ChangeUserState ( caller, args[1], 0, false );
+    break;
+    case 'whitelist':
+    ChangeUserState ( caller, args[1], 1, true );
+    break;
+    case 'blacklist':
+    ChangeUserState ( caller, args[1], 0, true );
+    break;
+    case 'reset':
+    ResetUser ( caller, args[1] );
+    break;
+    case 'add-playtester':
+    AddPlaytester( caller, args[1] );
+    break;
+    case 'remove-playtester':
+    RemovePlaytester ( caller, args[1] );
+    break;
+    case 'give-privileges':
+    GivePrivileges ( caller, args[1] );
+    break;
+    case 'remove-privileges':
+    RemovePrivileges ( caller, args[1] );
+    break;
+    case 'preview':
+    PreviewPlaytest();
+    break;
+    case 'generate':
+    GeneratePlaytest( args[1] );
+    break;
+    case 'undo':
 
-  return true;
-}
+    break;
+    default:
+    EphemeralResponse ( "Sorry! I couldn't understand your request" );
+    break;
+  }
+};
 
 function ParseArguments ( argString )
 {
@@ -95,7 +83,7 @@ function ParseArguments ( argString )
 
 function GetTargetUser ( argString )
 {
-  var reg = /@(\w+)\|(\w+)/
+  var reg = /@(\w+)\|(\w+)/;
   var match = reg.exec(argString);
   if ( !match )
   {
@@ -108,7 +96,7 @@ function GetTargetUser ( argString )
   };
 }
 
-function ChangeUserState ( caller, argString, newState, isStatePermanent, callback )
+function ChangeUserState ( caller, argString, newState, isStatePermanent )
 {
   var targetUser = GetTargetUser ( argString );
   var targetId = undefined;
@@ -140,26 +128,26 @@ function ChangeUserState ( caller, argString, newState, isStatePermanent, callba
     }
   }).then(function() {
     UpdateUser( targetId, isStatePermanent ? 'PermState' : 'TempState', newState )
-      .then (function() {
-        EphemeralResponse ( GenerateResponseText(), callback );
-      }).catch(function(err) {
-        console.log ( err );
-        callback ( err )
-      });
+    .then (function() {
+      EphemeralResponse ( GenerateResponseText() );
+    }).catch(function(err) {
+      console.log ( err );
+      EphemeralResponse ( err );
+    });
   }).catch(function(err, message) {
     console.log ( err );
     if ( err )
     {
-      callback ( err )
+      EphemeralResponse ( err );
     }
     else
     {
-      EphemeralResponse( message, callback );
+      EphemeralResponse( message );
     }
   });
 }
 
-function ResetUser ( caller, argString, callback )
+function ResetUser ( caller, argString )
 {
   var targetUser = GetTargetUser ( argString );
   var targetId = undefined;
@@ -201,12 +189,12 @@ function ResetUser ( caller, argString, callback )
       if ( err )
       {
         console.log ( err );
-        callback ( err );
+        EphemeralResponse ( err );
       }
       else
       {
         var prefix = caller === targetId ? 'Your' : targetUser.name + "'s";
-        EphemeralResponse ( prefix + ' playtesting status has been reset', callback );
+        EphemeralResponse ( prefix + ' playtesting status has been reset' );
       }
     });
 
@@ -214,21 +202,21 @@ function ResetUser ( caller, argString, callback )
     console.log ( err );
     if ( err )
     {
-      callback ( err )
+      EphemeralResponse ( err );
     }
     else
     {
-      EphemeralResponse( message, callback );
+      EphemeralResponse( message );
     }
   });
 }
 
-function AddPlaytester ( caller, userString, callback )
+function AddPlaytester ( caller, userString )
 {
   var targetUser = GetTargetUser(userString);
   if ( !targetUser)
   {
-    EphemeralResponse ( "User invalid!", callback );
+    EphemeralResponse ( "User invalid!" );
     return;
   }
 
@@ -249,32 +237,32 @@ function AddPlaytester ( caller, userString, callback )
       if ( err )
       {
         console.log ( err );
-        callback ( err );
+        EphemeralResponse ( err );
       }
       else
       {
-        EphemeralResponse ( targetUser.name + ' has been added as a playtester!', callback );
+        EphemeralResponse ( targetUser.name + ' has been added as a playtester!' );
       }
     });
   }).catch(function(err, message) {
     console.log ( err );
     if ( err )
     {
-      callback ( err );
+      EphemeralResponse ( err );
     }
     else
     {
-      EphemeralResponse(message, callback);
+      EphemeralResponse( message );
     }
   });
 }
 
-function RemovePlaytester ( caller, argString, callback )
+function RemovePlaytester ( caller, argString )
 {
-  var targetUser = GetTargetUser(userString);
+  var targetUser = GetTargetUser(argString);
   if ( !targetUser)
   {
-    EphemeralResponse ( "User invalid!", callback );
+    EphemeralResponse ( "User invalid!" );
     return;
   }
 
@@ -290,84 +278,84 @@ function RemovePlaytester ( caller, argString, callback )
       if ( err )
       {
         console.log ( err );
-        callback ( err );
+        EphemeralResponse ( err );
       }
       else
       {
-        EphemeralResponse ( targetUser.name + ' is no longer a playtester.', callback );
+        EphemeralResponse ( targetUser.name + ' is no longer a playtester.' );
       }
     });
   }).catch(function(err, message) {
     console.log ( err );
     if ( err )
     {
-      callback ( err );
+      EphemeralResponse ( err );
     }
     else
     {
-      EphemeralResponse(message, callback);
+      EphemeralResponse( message );
     }
   });
 }
 
-function GivePrivileges ( caller, argString, callback )
+function GivePrivileges ( caller, argString )
 {
-  var targetUser = GetTargetUser(userString);
+  var targetUser = GetTargetUser(argString);
   if ( !targetUser)
   {
-    EphemeralResponse ( "User invalid!", callback );
+    EphemeralResponse ( "User invalid!" );
     return;
   }
 
   VerifyAdminPrivileges( caller ).then( function() {
     UpdateUser ( targetUser.id, "Admin", true )
-      .then (function() {
-        EphemeralResponse ( targetUser.name + ' can now administer playtests!', callback );
-      }).catch(function(err) {
-        console.log ( err );
-        callback ( err )
-      });
+    .then (function() {
+      EphemeralResponse ( targetUser.name + ' can now administer playtests!' );
+    }).catch(function(err) {
+      console.log ( err );
+      EphemeralResponse ( err );
+    });
   }).catch(function(err, message) {
     console.log ( err );
     if ( err )
     {
-      callback ( err );
+      EphemeralResponse ( err );
     }
     else
     {
-      EphemeralResponse(message, callback);
+      EphemeralResponse( message );
     }
   });
 }
 
-function RemovePrivileges ( caller, argString, callback )
+function RemovePrivileges ( caller, argString )
 {
-  var targetUser = GetTargetUser(userString);
+  var targetUser = GetTargetUser(argString);
   if ( !targetUser)
   {
-    EphemeralResponse ( "User invalid!", callback );
+    EphemeralResponse ( "User invalid!" );
     return;
   }
 
   VerifyAdminPrivileges( caller ).then( function() {
-     UpdateUser ( targetUser.id, "Admin", false )
-      .then (function() {
-        EphemeralResponse ( targetUser.name + ' can no longer administer playtests.', callback );
-      }).catch(function(err) {
-        console.log ( err );
-        callback ( err )
-      });
-  }).catch(function(err, message) {
+   UpdateUser ( targetUser.id, "Admin", false )
+   .then (function() {
+    EphemeralResponse ( targetUser.name + ' can no longer administer playtests.' );
+  }).catch(function(err) {
     console.log ( err );
-    if ( err )
-    {
-      callback ( err );
-    }
-    else
-    {
-      EphemeralResponse(message, callback);
-    }
+    EphemeralResponse ( err );
   });
+}).catch(function(err, message) {
+  console.log ( err );
+  if ( err )
+  {
+    EphemeralResponse ( err );
+  }
+  else
+  {
+    EphemeralResponse( message );
+  }
+});
 }
 
 function UpdateUser ( userId, attributeToUpdate, newAttributeValue )
@@ -499,34 +487,34 @@ function GetPlaytestOdds ()
           playtests.forEach(function(playtest) {
             if ( playtest.Playtesters.includes(userId) )
             {
-              pool[userId].Count ++;
+              pool[userId].PlaytestCount ++;
             }
           });
 
-          if ( pool[userId].Count > maxCount )
+          if ( pool[userId].PlaytestCount > maxCount )
           {
-            maxCount = pool[userId].Count;
+            maxCount = pool[userId].PlaytestCount;
           }
         }
 
-        for ( var userId in pool )
+        for ( var id in pool )
         {
           output.pool.push ( {
-            id: pool[userId].User.id,
-            name: pool[userId].User.name,
-            entries: ( maxCount + 1 ) - pool[userId].Count
-          })
+            id: pool[id].User.id,
+            name: pool[id].User.name,
+            entries: ( maxCount + 1 ) - pool[id].PlaytestCount
+          });
         }
 
         resolve(output);
       });
-    })
+    });
   });
 
   return oddsPromise;
 }
 
-function GeneratePlaytest ( _count, callback )
+function GeneratePlaytest ( _count )
 {
   var count = Number(_count);
   if ( isNaN(count))
@@ -537,22 +525,23 @@ function GeneratePlaytest ( _count, callback )
 
 }
 
-function PreviewPlaytest ( callback )
+function PreviewPlaytest ()
 {
   GetPlaytestOdds().then(function(oddsOutput) {
-    PlaytestPreviewReponse(oddsOutput, callback)
+    PlaytestPreviewReponse(oddsOutput);
   }).catch(function(err) {
-    callback(err);
+    console.log(err);
+    EphemeralResponse(err);
   });
 }
 
-function PlaytestPreviewReponse( oddsOutput, callback )
+function PlaytestPreviewReponse( oddsOutput )
 {
   var attachment = {
     fallback: "Open slack on desktop to see full message",
     title: 'Playtest Preview',
     text: ''
-  }
+  };
 
   oddsOutput.pool.forEach(function(poolUser) {
     attachment.text += poolUser.name + ' ' + poolUser.entries + ':' + kDefaultPlaytestCount + '\n';
@@ -564,7 +553,7 @@ function PlaytestPreviewReponse( oddsOutput, callback )
     attachments: [ attachment ]
   };
 
-  callback( null, response );
+  PostResponse ( response );
 }
 
 function AppendListsToAttachment ( oddsOutput, attachment )
@@ -634,12 +623,28 @@ function VerifyAdminPrivileges ( userId ) {
   return verifyPromise;
 }
 
-function EphemeralResponse ( text, callback )
+function EphemeralResponse ( text )
 {
   var response = {
     "response_type": "ephemeral",
     "text": text,
   };
 
-  callback( null, response );
+  PostResponse ( response );
+}
+
+function PostResponse ( data )
+{
+  var options = {
+    hostname: responseURL.hostname,
+    path: responseURL.path,
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+    }
+  };
+
+  var req = https.request (options);
+  req.write(JSON.stringify(data));
+  req.end();
 }
